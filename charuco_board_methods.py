@@ -4,30 +4,30 @@
 
 	ChAruco Board Creation and Detection
 
-	1.) Create charuco board image and config file
-  
+  1.) Create charuco board image and config file
+
   2.) Load CharucoBoard object from config file
-  
+
   3.) Detect corners
 
-	4.) Detect pose
-  
+  4.) Detect pose
+
   5.) Find rotation and translation vectors
-  
+
   6.) Calibrate camera
 
 
 	TODO: use marker images to calibrate camera in single step
 
-	Useful methods from CharucoBoard class:
+	Useful methods from CharucoBoard class
 
-	  # retrieving board dimensions
+	# retrieving board dimensions
     squares_x, squares_y = cv2.aruco_CharucoBoard.getChessboardSize(board)
 
     # retrieving marker length
     marker_length = cv2.aruco_CharucoBoard.getMarkerLength(board)
 
-    # retrieving square length
+    #
     square_length = cv2.aruco_CharucoBoard.getSquareLength(board)
 
 """
@@ -45,6 +45,9 @@ import numpy as np
 import cv2
 import cv2.aruco as aruco
 
+# logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Settings
 
@@ -180,8 +183,85 @@ def create_charuco_board(CHARUCO_BOARD_SETTINGS_FILE, squaresX, squaresY, square
     return board
 
 
+def detect_charuco_board_corners(image, CHARUCO_BOARD_SETTINGS_FILE):
+    """
+    :param image:
+    :param CHARUCO_BOARD_SETTINGS_FILE:
+    :return: ret, ch_corners, ch_ids of interpolated charuco board detected in image
+    """
+
+    # read aruco dict num from config file
+    config_reader = cv2.FileStorage(CHARUCO_BOARD_SETTINGS_FILE, cv2.FileStorage_READ)
+    assert config_reader.isOpened()
+    aruco_dict_num = int(config_reader.getNode('aruco_dict_num').real())
+    config_reader.release()
+
+    # generate aruco dictonary
+    dictionary = cv2.aruco.getPredefinedDictionary(aruco_dict_num)
+
+    # aruco parameters TODO: find out what ever this means
+    aruco_parameters = aruco.DetectorParameters_create()
+
+    # convert image to grayscale
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # detect aruco marker corners
+    corners, ids, rejectedImgPoints = aruco.detectMarkers(gray, dictionary,
+                                                          parameters=aruco_parameters)
+
+    # if at least one corner was detected interpolate corners for more acurate result
+    if (ids is not None):
+        # load board from settings file
+        board = load_charuco_board(CHARUCO_BOARD_SETTINGS_FILE)
+
+        # interpolate corners
+        ret, ch_corners, ch_ids = aruco.interpolateCornersCharuco(corners, ids, gray, board)
+        
+        return ret, ch_corners, ch_ids
+
+    # otherwise
+    logger.info("No corners Detected")
+    return None, None, None
 
 
+def calibrate_camera_with_charuco_board(CHARUCO_BOARD_SETTINGS_FILE, input_calibration_image_directory,
+                                        output_calibration_data_file):
+    """
+    TODO:
+    :param CHARUCO_BOARD_SETTINGS_FILE:
+    :param input_calibration_image_directory:
+    :param output_calibration_data_file:
+    :return: rvec, tvec ... TODO:
+    """
+    # TODO:
+    # The calibrateCameraCharuco() function will fill the cameraMatrix and distCoeffs arrays
+    # with the camera calibration parameters. It will return the reprojection error obtained
+    # from the calibration. The elements in rvecs and tvecs will be filled with the estimated
+    # pose of the camera (respect to the ChArUco board) in each of the viewpoints.
+
+    pass
+
+
+def estimate_charuco_board_pose(image, CHARUCO_BOARD_SETTINGS_FILE, camera_matrix, dist_coefficients):
+    """
+
+    :param image:
+    :param CHARUCO_BOARD_SETTINGS_FILE:
+    :param camera_matrix:
+    :param dist_coefficients:
+    :return: rvec, tvec - rotation and translation vector
+    """
+
+    # detect charuco board corners and ids
+    ret, ch_corners, ch_ids = detect_charuco_board_corners(image, CHARUCO_BOARD_SETTINGS_FILE)
+
+    if all(v is not None for v in (ret, ch_corners, ch_ids)):
+        # find rotation and translation vectors
+        rvec, tvec = cv2.estimatePoseCharucoBoard(ch_corners, ch_ids, camera_matrix, dist_coefficients)
+
+    # otherwise
+    logger.info("No corners Detected")
+    return None, None, None
 
 """
 
